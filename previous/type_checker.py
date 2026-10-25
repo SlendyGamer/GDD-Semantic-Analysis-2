@@ -147,6 +147,25 @@ class TypeChecker:
     def _expression_type(
         self, expression: Expr, *, value_required: bool = True
     ) -> TypeName | None:
+        pending = [(expression, False, value_required)]
+        while pending:
+            node, visited, required = pending.pop()
+            if visited:
+                self._node_type(node, value_required=required)
+                continue
+            pending.append((node, True, required))
+            if isinstance(node, UnaryExpr):
+                pending.append((node.operand, False, True))
+            elif isinstance(node, BinaryExpr):
+                pending.append((node.right, False, True))
+                pending.append((node.left, False, True))
+            elif isinstance(node, CallExpr):
+                pending.extend((arg, False, True) for arg in reversed(node.arguments))
+        return expression.metadata.get("type")
+
+    def _node_type(
+        self, expression: Expr, *, value_required: bool
+    ) -> TypeName | None:
         # None é apenas um estado interno, não anota tipos inválidos na AST
         expression.metadata.pop("type", None)
         expression_type: TypeName | None
@@ -180,7 +199,7 @@ class TypeChecker:
         return expression_type
 
     def _unary_type(self, expression: UnaryExpr) -> TypeName | None:
-        operand_type = self._expression_type(expression.operand)
+        operand_type = expression.operand.metadata.get("type")
         if operand_type is None:
             return None
         required_type = (
@@ -198,8 +217,8 @@ class TypeChecker:
         return required_type
 
     def _binary_type(self, expression: BinaryExpr) -> TypeName | None:
-        left_type = self._expression_type(expression.left)
-        right_type = self._expression_type(expression.right)
+        left_type = expression.left.metadata.get("type")
+        right_type = expression.right.metadata.get("type")
         if left_type is None or right_type is None:
             return None
 
@@ -240,7 +259,7 @@ class TypeChecker:
     def _call_type(self, expression: CallExpr, value_required: bool) -> TypeName | None:
         symbol = expression.metadata["symbol"]
         assert isinstance(symbol, FunctionSymbol)
-        argument_types = [self._expression_type(argument) for argument in expression.arguments]
+        argument_types = [argument.metadata.get("type") for argument in expression.arguments]
         valid = len(argument_types) == len(symbol.parameter_types)
         if not valid:
             self._error(

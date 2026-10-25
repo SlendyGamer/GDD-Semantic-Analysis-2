@@ -117,7 +117,6 @@ class Lexer:
 
     def __init__(self, source: str):
         self.source = source
-        # TODO: inicialize aqui o estado exigido por sua estratégia.
         self.line = 1  # linha atual
         self.column = 1  # caracter da linha atual
         self.pos = 0  # posicao absoluta do caracter

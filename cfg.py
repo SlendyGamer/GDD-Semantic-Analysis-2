@@ -142,5 +142,23 @@ def format_cfg(cfg: CFG) -> str:
                     f"  {type(operation).__name__} "
                     f"em {span.start_line}:{span.start_column}"
                 )
-        lines.append(f"  terminador: {block.terminator!r}")
+        # Mostra a referência à AST sem expandir expressões recursivamente
+        terminator = block.terminator
+        if isinstance(terminator, Branch):
+            span = terminator.condition.span
+            description = (
+                f"Branch(condition={type(terminator.condition).__name__} "
+                f"em {span.start_line}:{span.start_column}, "
+                f"true_target={terminator.true_target}, "
+                f"false_target={terminator.false_target})"
+            )
+        elif isinstance(terminator, Return):
+            span = terminator.statement.span
+            description = (
+                f"Return(statement=ReturnStmt "
+                f"em {span.start_line}:{span.start_column})"
+            )
+        else:
+            description = repr(terminator)
+        lines.append(f"  terminador: {description}")
     return "\n".join(lines)

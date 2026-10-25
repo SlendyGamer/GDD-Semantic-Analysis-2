@@ -58,26 +58,35 @@ class ReadChecker:
             raise TypeError(f"operação inesperada no CFG: {type(operation).__name__}")
 
     def _check_expression(self, expression: Expr, state: set[Symbol]) -> None:
+        pending = [expression]
+        while pending:
+            expression = pending.pop()
+            self._check_expression_node(expression, state, pending)
+
+    def _check_expression_node(
+        self, expression: Expr, state: set[Symbol], pending: list[Expr],
+    ) -> None:
         if isinstance(expression, IdentifierExpr):
             symbol = symbol_of(expression)
-            # TODO: teste a presença do símbolo no estado. Se faltar, armazene
-            # UNINITIALIZED_READ usando o span desta ocorrência, não o da
-            # declaração. Continue a visita para encontrar outras leituras.
-            raise NotImplementedError("implemente o diagnóstico de leitura")
+            if symbol not in state:
+                self.diagnostics.append(SemanticDiagnostic(
+                    SemanticErrorKind.UNINITIALIZED_READ,
+                    f"a variável '{expression.name}' pode ser lida sem inicialização",
+                    expression.span,
+                ))
+            return
         if isinstance(expression, (IntLiteral, BoolLiteral)):
             return
         if isinstance(expression, UnaryExpr):
-            self._check_expression(expression.operand, state)
+            pending.append(expression.operand)
             return
         if isinstance(expression, BinaryExpr):
             # Escolha estática conservadora: confira ambos os operandos,
             # inclusive && e ||. O backend preservará o curto-circuito.
-            self._check_expression(expression.left, state)
-            self._check_expression(expression.right, state)
+            pending.extend((expression.right, expression.left))
             return
         if isinstance(expression, CallExpr):
-            for argument in expression.arguments:
-                self._check_expression(argument, state)
+            pending.extend(reversed(expression.arguments))
             return
         raise TypeError(f"expressão desconhecida: {type(expression).__name__}")
 
@@ -87,6 +96,8 @@ def check_function_exit(cfg: CFG, reachable: set[int]) -> list[SemanticDiagnosti
         return []
     if cfg.fallthrough_exit not in reachable:
         return []
-    # TODO: devolva um diagnóstico MISSING_RETURN com o span da função.
-    # Divergência em while (true) também pode tornar o fim inalcançável.
-    raise NotImplementedError("implemente o diagnóstico de retorno ausente")
+    return [SemanticDiagnostic(
+        SemanticErrorKind.MISSING_RETURN,
+        f"a função '{cfg.function.name}' pode terminar sem retornar valor",
+        cfg.function.span,
+    )]
