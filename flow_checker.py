@@ -58,6 +58,14 @@ class ReadChecker:
             raise TypeError(f"operação inesperada no CFG: {type(operation).__name__}")
 
     def _check_expression(self, expression: Expr, state: set[Symbol]) -> None:
+        pending = [expression]
+        while pending:
+            expression = pending.pop()
+            self._check_expression_node(expression, state, pending)
+
+    def _check_expression_node(
+        self, expression: Expr, state: set[Symbol], pending: list[Expr],
+    ) -> None:
         if isinstance(expression, IdentifierExpr):
             symbol = symbol_of(expression)
             if symbol not in state:
@@ -70,17 +78,15 @@ class ReadChecker:
         if isinstance(expression, (IntLiteral, BoolLiteral)):
             return
         if isinstance(expression, UnaryExpr):
-            self._check_expression(expression.operand, state)
+            pending.append(expression.operand)
             return
         if isinstance(expression, BinaryExpr):
             # Escolha estática conservadora: confira ambos os operandos,
             # inclusive && e ||. O backend preservará o curto-circuito.
-            self._check_expression(expression.left, state)
-            self._check_expression(expression.right, state)
+            pending.extend((expression.right, expression.left))
             return
         if isinstance(expression, CallExpr):
-            for argument in expression.arguments:
-                self._check_expression(argument, state)
+            pending.extend(reversed(expression.arguments))
             return
         raise TypeError(f"expressão desconhecida: {type(expression).__name__}")
 

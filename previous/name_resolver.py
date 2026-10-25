@@ -81,7 +81,7 @@ class NameResolver:
         if (mainFunction.type is not TypeName.INT or len(mainFunction.parameter_types) != 0):
             self._error(
                 SemanticErrorKind.INVALID_MAIN,
-                f"Função {mainFunction} deve ser do tipo int",
+                "Função main deve ter retorno int e nenhum parâmetro",
                 mainFunction.declaration.span,
             )
             
@@ -135,7 +135,7 @@ class NameResolver:
         elif isinstance(stat, Assignment):
             self._resolve_assignment(stat)
         elif isinstance(stat, CallStmt):
-            self._resolve_call_expr(stat.call)
+            self._resolve_expr(stat.call)
         elif isinstance(stat, IfStmt):
             self._resolve_if(stat)
         elif isinstance(stat, WhileStmt):
@@ -196,19 +196,23 @@ class NameResolver:
                 self._resolve_expr(item)
                 
     def _resolve_expr(self, expr: Expr) -> None:
-        if isinstance(expr, IdentifierExpr):
-            self._resolve_identifier(expr)
-        elif isinstance(expr, CallExpr):
-            self._resolve_call_expr(expr)
-        elif isinstance(expr, BinaryExpr):
-            self._resolve_expr(expr.left)
-            self._resolve_expr(expr.right)
-        elif isinstance(expr, UnaryExpr):
-            self._resolve_expr(expr.operand)
-        elif isinstance(expr, (IntLiteral, BoolLiteral, StringLiteral)):
-            pass
-        else:
-            raise TypeError(f"expressão não tratada do tipo {type(expr)}")
+        # Pilha preserva a ordem sem limitar o tamanho da expressão e sem estourar o limite de recursão
+        pending = [expr]
+        while pending:
+            expr = pending.pop()
+            if isinstance(expr, IdentifierExpr):
+                self._resolve_identifier(expr)
+            elif isinstance(expr, CallExpr):
+                self._resolve_call_expr(expr)
+                pending.extend(reversed(expr.arguments))
+            elif isinstance(expr, BinaryExpr):
+                pending.extend((expr.right, expr.left))
+            elif isinstance(expr, UnaryExpr):
+                pending.append(expr.operand)
+            elif isinstance(expr, (IntLiteral, BoolLiteral, StringLiteral)):
+                pass
+            else:
+                raise TypeError(f"expressão não tratada do tipo {type(expr)}")
         
     def _resolve_identifier(self, expr: IdentifierExpr) -> None:
         symbol = self._lookup_variable(expr.name)
@@ -232,9 +236,6 @@ class NameResolver:
             )
         else:
             expr.metadata["symbol"] = symbol
-            
-        for arg in expr.arguments:
-            self._resolve_expr(arg)
             
     def _lookup_variable(self, name: str) -> Symbol | None:
         scope = self.current_scope
